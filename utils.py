@@ -20,7 +20,8 @@ def un_normalize_image_tensor(image : torch.tensor):
 class ffhq_Dataset(Dataset):
     def __init__(self, root_dir : str, transforms : torchvision.transforms):
         self.augmentation = transforms
-        self.img_list =  os.listdir(root_dir)
+        self.img_list = os.listdir(root_dir)
+        self.img_list.remove("LICENSE.txt")
         self.root_dir = root_dir
         
     def __len__(self):
@@ -143,7 +144,7 @@ def ddpm_train_loop(config : dataclass, model : torch.nn.Module, noise_scheduler
             pipeline = DDPMPipeline(unet=accelerator.unwrap_model(model), scheduler=noise_scheduler)
 
             if (epoch + 1) % config.save_image_epochs == 0 or epoch == config.num_epochs - 1:
-                evaluate(config, epoch, pipeline)
+                ddpm_evaluate(config, epoch, pipeline)
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.num_epochs - 1:
                 pipeline.save_pretrained(config.output_dir) 
