@@ -1,1 +1,3 @@
-dataset/ffhq/thumbnails128x128
+dataset/*
+*/wandb
+*/.ipynb_checkpoints
