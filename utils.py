@@ -74,11 +74,11 @@ def ddpm_evaluate(config, epoch, pipeline):
 
     # Make a grid out of the images
     image_grid = make_grid(images, rows=4, cols=4)
-
     # Save the images
     test_dir = os.path.join(config.output_dir, "samples")
     os.makedirs(test_dir, exist_ok=True)
     image_grid.save(f"{test_dir}/{epoch:04d}.png")
+    return image_grid
 
 # train
 def ddpm_train_loop(config : dataclass, model : torch.nn.Module, noise_scheduler : diffusers.DDPMScheduler, optimizer : torch.optim.Adam, train_dataloader, lr_scheduler):
@@ -144,7 +144,8 @@ def ddpm_train_loop(config : dataclass, model : torch.nn.Module, noise_scheduler
             pipeline = DDPMPipeline(unet=accelerator.unwrap_model(model), scheduler=noise_scheduler)
 
             if (epoch + 1) % config.save_image_epochs == 0 or epoch == config.num_epochs - 1:
-                ddpm_evaluate(config, epoch, pipeline)
+                eval_generations = ddpm_evaluate(config, epoch, pipeline)
+                accelerator.log({"Generations" : eval_generations}, step=epoch)
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.num_epochs - 1:
                 pipeline.save_pretrained(config.output_dir) 
