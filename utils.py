@@ -146,7 +146,7 @@ def ddpm_train_loop(config : dataclass, model : torch.nn.Module, noise_scheduler
 
             if (epoch + 1) % config.save_image_epochs == 0 or epoch == config.num_epochs - 1:
                 eval_generations = ddpm_evaluate(config, epoch, pipeline)
-                accelerator.log({"Generations" : wandb.Image(eval_generations)}, step=epoch)
+                accelerator.log({"Generations" : wandb.Image(eval_generations)})
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.num_epochs - 1:
                 pipeline.save_pretrained(config.output_dir) 
