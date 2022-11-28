@@ -1,13 +1,13 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from diffusers import UNet2DModel
+from UnetDropout import UNet2DModel
 from PIL import Image
 from torch.utils.data import Dataset
 import os
 import torchvision
 import diffusers
-from diffusers import DDPMPipeline
+from DDPMPipelineDropout import DDPMPipeline
 import math
 from accelerate import Accelerator
 from tqdm.auto import tqdm
@@ -55,6 +55,9 @@ def get_default_unet(config):
         "UpBlock2D", 
         "UpBlock2D"  
       ),
+    down_dropout=config.down_dropout,
+    mid_dropout=config.mid_dropout,
+    up_dropout=config.up_dropout
     )
     return model
 
@@ -71,6 +74,8 @@ def ddpm_evaluate(config, epoch, pipeline):
     images = pipeline(
         batch_size = config.eval_batch_size, 
         generator=torch.manual_seed(config.seed),
+        bayesian_avg_samples=config.bayesian_avg_samples,
+        bayesian_avg_range=config.bayesian_avg_range
     ).images
 
     # Make a grid out of the images
