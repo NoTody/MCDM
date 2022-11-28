@@ -93,8 +93,13 @@ class DDPMPipeline(DiffusionPipeline):
 
         # set step values
         self.scheduler.set_timesteps(num_inference_steps)
-        
-        self.unet.train()
+
+        #turn on dropout if averaging using MCDropout
+        if bayesian_avg_samples > 1 : 
+            self.unet.train()
+        else:
+            self.unet.eval()
+
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output
             if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]):
