@@ -109,6 +109,7 @@ class DDPMPipeline(DiffusionPipeline):
                     except:
                         model_output = self.unet(image, t).sample / bayesian_avg_samples
             else:
+                self.unet.eval()
                 model_output = self.unet(image, t).sample
 
             # 2. compute previous image: x_t -> x_t-1
