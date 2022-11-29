@@ -32,6 +32,15 @@ class ffhq_Dataset(Dataset):
         img = Image.open(self.root_dir + self.img_list[idx])
         return self.augmentation(img)
 
+def get_config_class(config_dict):
+    @dataclass
+    class TrainConfig:
+        def __init__(self, config) -> None:
+            for key in config:
+                setattr(self, key, config[key])
+
+    return TrainConfig(config_dict)
+
 def get_default_unet(config):
     model = UNet2DModel(
     sample_size=config.image_size,  # the target image resolution
@@ -85,6 +94,14 @@ def ddpm_evaluate(config, epoch, pipeline):
     os.makedirs(test_dir, exist_ok=True)
     image_grid.save(f"{test_dir}/{epoch:04d}.png")
     return image_grid
+
+def load_model(path):
+    save_dict = torch.load(path)
+    config = get_config_class(save_dict["config"])
+    weights = save_dict["weights"]
+    model = get_default_unet(config)
+    model.load_state_dict(weights)
+    return model, config
 
 def save_model(model, config, epoch):
     torch.save({"config": config.__dict__, "weights":model.state_dict()}, config.output_dir+f"/{config.run_name}-epoch-{epoch}.pth")
