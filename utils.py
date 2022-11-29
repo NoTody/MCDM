@@ -86,6 +86,9 @@ def ddpm_evaluate(config, epoch, pipeline):
     image_grid.save(f"{test_dir}/{epoch:04d}.png")
     return image_grid
 
+def save_model(model, config, epoch):
+    torch.save({"config": config, "weights":model.state_dict}, config.output_dir+f"{config.run_name}-epoch-{epoch}.pth")
+
 # train
 def ddpm_train_loop(config : dataclass, model : torch.nn.Module, noise_scheduler : diffusers.DDPMScheduler, optimizer : torch.optim.Adam, train_dataloader, lr_scheduler):
     # Initialize accelerator and tensorboard logging
@@ -154,4 +157,4 @@ def ddpm_train_loop(config : dataclass, model : torch.nn.Module, noise_scheduler
                 accelerator.log({"Generations" : wandb.Image(eval_generations)})
 
             if (epoch + 1) % config.save_model_epochs == 0 or epoch == config.num_epochs - 1:
-                pipeline.save_pretrained(config.output_dir) 
+                save_model(model, config, epoch)
