@@ -32,6 +32,7 @@ class DDPMPipeline(DiffusionPipeline):
         return_dict: bool = True,
         bayesian_avg_samples: int = 1,
         bayesian_avg_range: tuple=(0,1000),
+        progress_bar = True,
         **kwargs,
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
@@ -100,22 +101,40 @@ class DDPMPipeline(DiffusionPipeline):
         else:
             self.unet.eval()
 
-        for t in self.progress_bar(self.scheduler.timesteps):
-            # 1. predict noise model_output
-            if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
-                
-                for i in range(bayesian_avg_samples):
-                    try:
-                        model_output += self.unet(image, t).sample / bayesian_avg_samples
-                    except:
-                        model_output = self.unet(image, t).sample / bayesian_avg_samples
-            else:
-                self.unet.eval()
-                model_output = self.unet(image, t).sample
+        if progress_bar:
+            for t in self.progress_bar(self.scheduler.timesteps):
+                # 1. predict noise model_output
+                if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
 
-            # 2. compute previous image: x_t -> x_t-1
-            image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
-            del model_output
+                    for i in range(bayesian_avg_samples):
+                        try:
+                            model_output += self.unet(image, t).sample / bayesian_avg_samples
+                        except:
+                            model_output = self.unet(image, t).sample / bayesian_avg_samples
+                else:
+                    self.unet.eval()
+                    model_output = self.unet(image, t).sample
+
+                # 2. compute previous image: x_t -> x_t-1
+                image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
+                del model_output
+        else:
+            for t in self.scheduler.timesteps:
+                # 1. predict noise model_output
+                if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
+
+                    for i in range(bayesian_avg_samples):
+                        try:
+                            model_output += self.unet(image, t).sample / bayesian_avg_samples
+                        except:
+                            model_output = self.unet(image, t).sample / bayesian_avg_samples
+                else:
+                    self.unet.eval()
+                    model_output = self.unet(image, t).sample
+
+                # 2. compute previous image: x_t -> x_t-1
+                image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
+                del model_output
 
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()

@@ -1,5 +1,7 @@
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torchvision import transforms
 import numpy as np
 from UnetDropout import UNet2DModel
 from PIL import Image
@@ -8,7 +10,8 @@ import os
 import torchvision
 import diffusers
 from DDPMPipelineDropout import DDPMPipeline
-import math
+from torchmetrics.image import fid
+from torchmetrics.image.inception import InceptionScore
 from accelerate import Accelerator
 from tqdm.auto import tqdm
 from dataclasses import dataclass
@@ -77,6 +80,10 @@ def make_grid(images, rows, cols):
         grid.paste(image, box=(i%cols*w, i//cols*h))
     return grid
 
+def unnormalize_tensor(tensor):
+    tensor = tensor*255
+    return tensor.to(torch.uint8)
+
 def ddpm_evaluate(config, epoch, pipeline):
     # Sample some images from random noise (this is the backward diffusion process).
     # The default pipeline output type is `List[PIL.Image]`
@@ -94,6 +101,57 @@ def ddpm_evaluate(config, epoch, pipeline):
     os.makedirs(test_dir, exist_ok=True)
     image_grid.save(f"{test_dir}/{epoch:04d}.png")
     return image_grid
+
+def generate_images(config, pipeline, batchsize, progress_bar = False):
+    images = pipeline(
+        batch_size = batchsize, 
+        generator=None,
+        bayesian_avg_samples=config.bayesian_avg_samples,
+        bayesian_avg_range=config.bayesian_avg_range,
+        progress_bar=progress_bar,
+        output_type = "np"
+    ).images
+    return images
+
+def calculate_metrics(config, pipeline, batch_size, num_images, generation_progress = False):
+    #transforms
+    image_transforms = transforms.ToTensor()
+
+    if config.dataset == "FFHQ":
+        # FFHQ dataset
+        dataset = ffhq_Dataset("../dataset/ffhq/thumbnails128x128/", image_transforms)
+        config.image_size = 128
+    elif config.dataset == "CIFAR10":
+        #cifar dataset
+        dataset = torchvision.datasets.CIFAR10(root= "../dataset/", download=True, image_transform=transforms)
+        config.image_size = 32
+    else:
+        raise ValueError("Invalid Dataset supplied")
+
+    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    fid_obj = fid.FrechetInceptionDistance(normalize = True)
+    is_obj = InceptionScore(normalize = True)
+    
+    for i, batch in tqdm(enumerate(train_loader)):
+
+        #generate samples from model
+        np_images = generate_images(config, pipeline, batch_size, progress_bar=generation_progress)
+        img_tensor = torch.tensor(np_images).permute(0, -1, 1, 2)
+
+        #update metrics
+        fid_obj.update(unnormalize_tensor(img_tensor), real=False)
+        fid_obj.update(unnormalize_tensor(batch), real=True)
+
+        is_obj.update(unnormalize_tensor(img_tensor))
+
+        if (i+1)*batch_size > num_images:
+            print("Image Limit reached breaking")
+            break
+
+    fid_score = fid_obj.compute()
+    inception_score = is_obj.compute()
+
+    return fid_score, inception_score
 
 def load_model(path):
     save_dict = torch.load(path)
