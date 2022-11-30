@@ -102,7 +102,8 @@ class DDPMPipeline(DiffusionPipeline):
 
         for t in self.progress_bar(self.scheduler.timesteps):
             # 1. predict noise model_output
-            if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]):
+            if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
+                
                 for i in range(bayesian_avg_samples):
                     try:
                         model_output += self.unet(image, t).sample / bayesian_avg_samples
