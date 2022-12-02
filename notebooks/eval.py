@@ -34,7 +34,7 @@ try :
 except:
     results = {}
 
-if config.run_name in results:
+if args.name in results:
     results[args.name]["fid_score"] = fid_score.item()
     results[args.name]["path"] = model_path
     results[args.name]["inception_score_mean"] = inception_score[0].item()
