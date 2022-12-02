@@ -132,8 +132,10 @@ def calculate_metrics(config, pipeline, batch_size, num_images, generation_progr
     fid_obj = fid.FrechetInceptionDistance(normalize = True)
     is_obj = InceptionScore(normalize = True)
     
-    for i, batch in tqdm(enumerate(train_loader)):
-
+    data_iter = iter(train_loader)
+    num_iters = num_images // batch_size + 1
+    for i in tqdm(range(num_iters)):
+        batch = next(data_iter)
         #generate samples from model
         np_images = generate_images(config, pipeline, batch_size, progress_bar=generation_progress)
         img_tensor = torch.tensor(np_images).permute(0, -1, 1, 2)
@@ -143,10 +145,6 @@ def calculate_metrics(config, pipeline, batch_size, num_images, generation_progr
         fid_obj.update(unnormalize_tensor(batch), real=True)
 
         is_obj.update(unnormalize_tensor(img_tensor))
-
-        if (i+1)*batch_size > num_images:
-            print("Image Limit reached breaking")
-            break
 
     fid_score = fid_obj.compute()
     inception_score = is_obj.compute()
@@ -158,7 +156,13 @@ def load_model(path):
     config = get_config_class(save_dict["config"])
     weights = save_dict["weights"]
     model = get_default_unet(config)
-    model.load_state_dict(weights)
+    try:
+        model.load_state_dict(weights)
+    except Exception as e:
+        print("Loading failed, Trying to Load data parallel mode")
+        model = torch.nn.parallel.DataParallel(model)
+        model.load_state_dict(weights)
+        return model.module , config
     return model, config
 
 def save_model(model, config, epoch):
