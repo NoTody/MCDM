@@ -96,21 +96,14 @@ class DDPMPipeline(DiffusionPipeline):
         self.scheduler.set_timesteps(num_inference_steps)
 
         #turn on dropout if averaging using MCDropout
-        if bayesian_avg_samples > 1 : 
-            self.unet.train()
-        else:
-            self.unet.eval()
-
+        self.unet.train()
+        
         if progress_bar:
             for t in self.progress_bar(self.scheduler.timesteps):
                 # 1. predict noise model_output
                 if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
-
-                    for i in range(bayesian_avg_samples):
-                        try:
-                            model_output += self.unet(image, t).sample / bayesian_avg_samples
-                        except:
-                            model_output = self.unet(image, t).sample / bayesian_avg_samples
+                    outs = torch.stack([self.unet(image, t).sample for i in range(bayesian_avg_samples)])
+                    model_output = outs.mean(axis=0)
                 else:
                     self.unet.eval()
                     model_output = self.unet(image, t).sample
@@ -122,12 +115,8 @@ class DDPMPipeline(DiffusionPipeline):
             for t in self.scheduler.timesteps:
                 # 1. predict noise model_output
                 if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
-
-                    for i in range(bayesian_avg_samples):
-                        try:
-                            model_output += self.unet(image, t).sample / bayesian_avg_samples
-                        except:
-                            model_output = self.unet(image, t).sample / bayesian_avg_samples
+                    outs = torch.stack([self.unet(image, t).sample for i in range(bayesian_avg_samples)])
+                    model_output = outs.mean(axis=0)
                 else:
                     self.unet.eval()
                     model_output = self.unet(image, t).sample
