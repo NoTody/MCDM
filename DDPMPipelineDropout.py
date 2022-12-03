@@ -33,6 +33,7 @@ class DDPMPipeline(DiffusionPipeline):
         bayesian_avg_samples: int = 1,
         bayesian_avg_range: tuple=(0,1000),
         progress_bar = True,
+        return_stats = False,
         **kwargs,
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
@@ -97,13 +98,22 @@ class DDPMPipeline(DiffusionPipeline):
 
         #turn on dropout if averaging using MCDropout
         self.unet.train()
-        
+
+        out_means = []
+        out_stds = []
+
         if progress_bar:
             for t in self.progress_bar(self.scheduler.timesteps):
                 # 1. predict noise model_output
                 if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
                     outs = torch.stack([self.unet(image, t).sample for i in range(bayesian_avg_samples)])
                     model_output = outs.mean(axis=0)
+                    if return_stats:
+                        model_mean = torch.sum(model_output)/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3] * model_output.shape[0])
+                        model_std = torch.sum(outs.std(axis=0))/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3]* model_output.shape[0])
+                        out_means.append(model_mean.item())
+                        out_stds.append(model_std.item())
+
                 else:
                     self.unet.eval()
                     model_output = self.unet(image, t).sample
@@ -132,5 +142,8 @@ class DDPMPipeline(DiffusionPipeline):
 
         if not return_dict:
             return (image,)
+
+        if return_stats:
+           return ImagePipelineOutput(images=image), torch.tensor(out_means), torch.tensor(out_stds)
 
         return ImagePipelineOutput(images=image)

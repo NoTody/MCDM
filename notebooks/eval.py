@@ -15,6 +15,7 @@ parse.add_argument("--samples", type=int)
 parse.add_argument("-b", "--batch_size", type=int)
 parse.add_argument("-n", "--num_images", type=int)
 parse.add_argument("--name", type=str)
+parse.add_argument("--stats", action=True)
 args = parse.parse_args()
 
 model_path = args.model
@@ -27,7 +28,10 @@ config.bayesian_avg_range = (args.start_range, args.end_range)
 config.bayesian_avg_samples = args.samples
 print(config.__dict__)
 
-fid_score, inception_score = utils.calculate_metrics(config, pipeline, batch_size=args.batch_size, num_images=args.num_images, generation_progress=True)
+if args.stats:
+    fid_score, inception_score, means, stds = utils.calculate_metrics(config, pipeline, batch_size=args.batch_size, num_images=args.num_images, generation_progress=True, calculate_stats=args.stats)
+else:
+    fid_score, inception_score = utils.calculate_metrics(config, pipeline, batch_size=args.batch_size, num_images=args.num_images, generation_progress=True)
 
 try :
     results = torch.load("../results.dict")
@@ -39,6 +43,9 @@ if args.name in results:
     results[args.name]["path"] = model_path
     results[args.name]["inception_score_mean"] = inception_score[0].item()
     results[args.name]["inception_score_std"] = inception_score[1].item()
+    if args.stats:
+        results[args.name]["diffusion_mean"] = means
+        results[args.name]["diffusion_std"] = stds 
     results[args.name]["config"] = config.__dict__
 else:
     results[args.name] = {}
@@ -46,6 +53,9 @@ else:
     results[args.name]["path"] = model_path
     results[args.name]["inception_score_mean"] = inception_score[0].item()
     results[args.name]["inception_score_std"] = inception_score[1].item()
+    if args.stats:
+        results[args.name]["diffusion_mean"] = means
+        results[args.name]["diffusion_std"] = stds 
     results[args.name]["config"] = config.__dict__
 
 torch.save(results, "../results.dict")

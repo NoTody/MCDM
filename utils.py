@@ -113,7 +113,19 @@ def generate_images(config, pipeline, batchsize, progress_bar = False):
     ).images
     return images
 
-def calculate_metrics(config, pipeline, batch_size, num_images, generation_progress = False):
+def calculate_diffusion_stats(config, pipeline, batch_size, progress_bar=True):
+    images, means, stds = pipeline(
+        batch_size = batch_size, 
+        generator=None,
+        bayesian_avg_samples=config.bayesian_avg_samples,
+        bayesian_avg_range=config.bayesian_avg_range,
+        progress_bar=progress_bar,
+        output_type = "np",
+        return_stats = True
+    )
+    return images.images, means, stds
+
+def calculate_metrics(config, pipeline, batch_size, num_images, generation_progress = False, calculate_stats=False):
     #transforms
     image_transforms = transforms.ToTensor()
 
@@ -134,10 +146,18 @@ def calculate_metrics(config, pipeline, batch_size, num_images, generation_progr
     
     data_iter = iter(train_loader)
     num_iters = num_images // batch_size + 1
+    means_ = torch.zeros((1000))
+    stds_ = torch.zeros((1000))
     for i in tqdm(range(num_iters)):
         batch = next(data_iter)
         #generate samples from model
         np_images = generate_images(config, pipeline, batch_size, progress_bar=generation_progress)
+        if calculate_stats:
+            np_images, means, stds = calculate_diffusion_stats(config, pipeline, batch_size, progress_bar=generation_progress)
+            means_ += means
+            stds_ += stds
+        else:
+            np_images = generate_images(config, pipeline, batch_size, progress_bar=generation_progress)
         img_tensor = torch.tensor(np_images).permute(0, -1, 1, 2)
 
         #update metrics
@@ -145,10 +165,12 @@ def calculate_metrics(config, pipeline, batch_size, num_images, generation_progr
         fid_obj.update(unnormalize_tensor(batch), real=True)
 
         is_obj.update(unnormalize_tensor(img_tensor))
-
+    means_ /= num_iters
+    stds_ /= num_iters
     fid_score = fid_obj.compute()
     inception_score = is_obj.compute()
-
+    if calculate_stats:
+        return fid_score, inception_score, means_, stds_
     return fid_score, inception_score
 
 def load_model(path):
