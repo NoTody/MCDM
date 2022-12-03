@@ -15,7 +15,7 @@ parse.add_argument("--samples", type=int)
 parse.add_argument("-b", "--batch_size", type=int)
 parse.add_argument("-n", "--num_images", type=int)
 parse.add_argument("--name", type=str)
-parse.add_argument("--stats", action=True)
+parse.add_argument("--stats", action="store_true")
 args = parse.parse_args()
 
 model_path = args.model
