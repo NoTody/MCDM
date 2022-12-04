@@ -127,6 +127,11 @@ class DDPMPipeline(DiffusionPipeline):
                 if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
                     outs = torch.stack([self.unet(image, t).sample for i in range(bayesian_avg_samples)])
                     model_output = outs.mean(axis=0)
+                    if return_stats:
+                        model_mean = torch.sum(model_output)/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3] * model_output.shape[0])
+                        model_std = torch.sum(outs.std(axis=0))/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3]* model_output.shape[0])
+                        out_means.append(model_mean.item())
+                        out_stds.append(model_std.item())
                 else:
                     self.unet.eval()
                     model_output = self.unet(image, t).sample
