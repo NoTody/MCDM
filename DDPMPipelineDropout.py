@@ -96,9 +96,6 @@ class DDPMPipeline(DiffusionPipeline):
         # set step values
         self.scheduler.set_timesteps(num_inference_steps)
 
-        #turn on dropout if averaging using MCDropout
-        self.unet.train()
-
         out_means = []
         out_stds = []
 
@@ -106,6 +103,8 @@ class DDPMPipeline(DiffusionPipeline):
             for t in self.progress_bar(self.scheduler.timesteps):
                 # 1. predict noise model_output
                 if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
+                    #turn on dropout if averaging using MCDropout
+                    self.unet.train()
                     outs = torch.stack([self.unet(image, t).sample for i in range(bayesian_avg_samples)])
                     model_output = outs.mean(axis=0)
                     if return_stats:
@@ -144,6 +143,7 @@ class DDPMPipeline(DiffusionPipeline):
         image = image.cpu().permute(0, 2, 3, 1).numpy()
         if output_type == "pil":
             image = self.numpy_to_pil(image)
+
 
         if not return_dict:
             return (image,)

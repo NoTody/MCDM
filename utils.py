@@ -126,6 +126,7 @@ def calculate_diffusion_stats(config, pipeline, batch_size, progress_bar=True):
     return images.images, means, stds
 
 def calculate_metrics(config, pipeline, batch_size, num_images, generation_progress = False, calculate_stats=False):
+    torch.manual_seed(config.seed)
     #transforms
     image_transforms = transforms.ToTensor()
 
@@ -151,7 +152,6 @@ def calculate_metrics(config, pipeline, batch_size, num_images, generation_progr
     for i in tqdm(range(num_iters)):
         batch = next(data_iter)
         #generate samples from model
-        np_images = generate_images(config, pipeline, batch_size, progress_bar=generation_progress)
         if calculate_stats:
             np_images, means, stds = calculate_diffusion_stats(config, pipeline, batch_size, progress_bar=generation_progress)
             means_ += means
