@@ -1,16 +1,15 @@
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torchvision import transforms
 import numpy as np
 from UnetDropout import UNet2DModel
 from PIL import Image
 from torch.utils.data import Dataset
 import os
 import torchvision
-from torchvision import transforms
-from torch.utils.data import DataLoader
 import diffusers
 from DDPMPipelineDropout import DDPMPipeline
-#from diffusers import DDIMPipeline
 from DDIMPipelineDropout import DDIMPipeline
 import math
 from torchmetrics.image import fid
@@ -208,6 +207,77 @@ def evaluate(config, epoch, pipeline):
     image_grid.save(f"{test_dir}/{epoch:04d}.png")
     return image_grid
 
+def generate_images(config, pipeline, batchsize, progress_bar = False):
+    images = pipeline(
+        batch_size = batchsize, 
+        generator=None,
+        bayesian_avg_samples=config.bayesian_avg_samples,
+        bayesian_avg_range=config.bayesian_avg_range,
+        progress_bar=progress_bar,
+        output_type = "np"
+    ).images
+    return images
+
+def calculate_diffusion_stats(config, pipeline, batch_size, progress_bar=True):
+    images, means, stds = pipeline(
+        batch_size = batch_size, 
+        generator=None,
+        bayesian_avg_samples=config.bayesian_avg_samples,
+        bayesian_avg_range=config.bayesian_avg_range,
+        progress_bar=progress_bar,
+        output_type = "np",
+        return_stats = True
+    )
+    return images.images, means, stds
+
+def calculate_metrics(config, pipeline, batch_size, num_images, generation_progress = False, calculate_stats=False):
+    torch.manual_seed(config.seed)
+    #transforms
+    image_transforms = transforms.ToTensor()
+
+    if config.dataset == "FFHQ":
+        # FFHQ dataset
+        dataset = ffhq_Dataset("../dataset/ffhq/thumbnails128x128/", image_transforms)
+        config.image_size = 128
+    elif config.dataset == "CIFAR10":
+        #cifar dataset
+        dataset = torchvision.datasets.CIFAR10(root= "../dataset/", download=True, image_transform=transforms)
+        config.image_size = 32
+    else:
+        raise ValueError("Invalid Dataset supplied")
+
+    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    fid_obj = fid.FrechetInceptionDistance(normalize = True)
+    is_obj = InceptionScore(normalize = True)
+    
+    data_iter = iter(train_loader)
+    num_iters = num_images // batch_size + 1
+    means_ = torch.zeros((1000))
+    stds_ = torch.zeros((1000))
+    for i in tqdm(range(num_iters)):
+        batch = next(data_iter)
+        #generate samples from model
+        if calculate_stats:
+            np_images, means, stds = calculate_diffusion_stats(config, pipeline, batch_size, progress_bar=generation_progress)
+            means_ += means
+            stds_ += stds
+        else:
+            np_images = generate_images(config, pipeline, batch_size, progress_bar=generation_progress)
+        img_tensor = torch.tensor(np_images).permute(0, -1, 1, 2)
+
+        #update metrics
+        fid_obj.update(unnormalize_tensor(img_tensor), real=False)
+        fid_obj.update(unnormalize_tensor(batch), real=True)
+
+        is_obj.update(unnormalize_tensor(img_tensor))
+    means_ /= num_iters
+    stds_ /= num_iters
+    fid_score = fid_obj.compute()
+    inception_score = is_obj.compute()
+    if calculate_stats:
+        return fid_score, inception_score, means_, stds_
+    return fid_score, inception_score
+
 def load_model(path):
     save_dict = torch.load(path)
     config = get_config_class(save_dict["config"])
@@ -220,7 +290,7 @@ def load_model(path):
         model = torch.nn.parallel.DataParallel(model)
         model.load_state_dict(weights)
         return model.module , config
-    return model,
+    return model, config
 
 def save_model(model, config, epoch):
     torch.save({"config": config.__dict__, "weights":model.state_dict()}, config.output_dir+f"/{config.run_name}.pth")

@@ -144,7 +144,6 @@ class DDPMPipeline(DiffusionPipeline):
         if output_type == "pil":
             image = self.numpy_to_pil(image)
 
-
         if not return_dict:
             return (image,)
 
