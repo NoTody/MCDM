@@ -2,6 +2,7 @@ dataset/*
 */wandb
 */.ipynb_checkpoints
 __pycache__
-**/.err
-**/.out
-**/.dict
+**/*.err
+**/*.out
+**/*.dict
+**/*.bsub
