@@ -32,6 +32,8 @@ class DDPMPipeline(DiffusionPipeline):
         return_dict: bool = True,
         bayesian_avg_samples: int = 1,
         bayesian_avg_range: tuple=(0,1000),
+        progress_bar = True,
+        return_stats = False,
         **kwargs,
     ) -> Union[ImagePipelineOutput, Tuple]:
         r"""
@@ -94,34 +96,59 @@ class DDPMPipeline(DiffusionPipeline):
         # set step values
         self.scheduler.set_timesteps(num_inference_steps)
 
-        #turn on dropout if averaging using MCDropout
-        if bayesian_avg_samples > 1 : 
-            self.unet.train()
+        out_means = []
+        out_stds = []
+
+        if progress_bar:
+            for t in self.progress_bar(self.scheduler.timesteps):
+                # 1. predict noise model_output
+                if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
+                    #turn on dropout if averaging using MCDropout
+                    self.unet.train()
+                    outs = torch.stack([self.unet(image, t).sample for i in range(bayesian_avg_samples)])
+                    model_output = outs.mean(axis=0)
+                    if return_stats:
+                        model_mean = torch.sum(model_output)/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3] * model_output.shape[0])
+                        model_std = torch.sum(outs.std(axis=0))/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3]* model_output.shape[0])
+                        out_means.append(model_mean.item())
+                        out_stds.append(model_std.item())
+
+                else:
+                    self.unet.eval()
+                    model_output = self.unet(image, t).sample
+
+                # 2. compute previous image: x_t -> x_t-1
+                image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
+                del model_output
         else:
-            self.unet.eval()
+            for t in self.scheduler.timesteps:
+                # 1. predict noise model_output
+                if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]) and bayesian_avg_samples > 1:
+                    outs = torch.stack([self.unet(image, t).sample for i in range(bayesian_avg_samples)])
+                    model_output = outs.mean(axis=0)
+                    if return_stats:
+                        model_mean = torch.sum(model_output)/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3] * model_output.shape[0])
+                        model_std = torch.sum(outs.std(axis=0))/(model_output.shape[1] * model_output.shape[2] * model_output.shape[3]* model_output.shape[0])
+                        out_means.append(model_mean.item())
+                        out_stds.append(model_std.item())
+                else:
+                    self.unet.eval()
+                    model_output = self.unet(image, t).sample
 
-        for t in self.progress_bar(self.scheduler.timesteps):
-            # 1. predict noise model_output
-            if t in torch.arange(bayesian_avg_range[0], bayesian_avg_range[1]):
-                for i in range(bayesian_avg_samples):
-                    try:
-                        model_output += self.unet(image, t).sample / bayesian_avg_samples
-                    except:
-                        model_output = self.unet(image, t).sample / bayesian_avg_samples
-            else:
-                self.unet.eval()
-                model_output = self.unet(image, t).sample
-
-            # 2. compute previous image: x_t -> x_t-1
-            image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
-            del model_output
+                # 2. compute previous image: x_t -> x_t-1
+                image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
+                del model_output
 
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
         if output_type == "pil":
             image = self.numpy_to_pil(image)
 
+
         if not return_dict:
             return (image,)
+
+        if return_stats:
+           return ImagePipelineOutput(images=image), torch.tensor(out_means), torch.tensor(out_stds)
 
         return ImagePipelineOutput(images=image)
