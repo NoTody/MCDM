@@ -1,4 +1,9 @@
-torch
-diffusers["torch"]
-wandb
-torchmetrics[image]
+accelerate==0.14.0
+diffusers==0.7.2
+numpy==1.19.2
+Pillow==9.3.0
+torch==1.8.1
+torchmetrics==0.11.0
+torchvision==0.9.1
+tqdm==4.62.3
+wandb==0.13.5
