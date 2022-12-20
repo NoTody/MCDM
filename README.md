@@ -22,9 +22,9 @@ accelerate launch ddpm_train.py
 ## Evaluation
 Run DDIM evlauation:
 ```
-python ./notebooks/eval_ddim.py --model <model_path> --start_range 0 --end_range 1000 --s    amples 1 --batch_size 128 --num_images 1000 --name <dict_name>
+python ./eval/eval_ddim.py --model <model_path> --start_range <ensemble start step> --end_range <ensemble end step> --samples <number of ensemble samples> --batch_size <batch size> --num_images <number generated images> --name <dictionary name>
 ```
 Run DDPM evlauation:
 ```
-python eval_ddpm.py --model <model_path> --start_range 0 --end_range 250 --sam    ples 5 --batch_size 128 --num_images 1000 --name <dict_name>
+python ./eval/eval_ddpm.py --model <model_path> --start_range <ensemble start step> --end_range <ensemble end step> --samples <number of ensemble samples> --batch_size <batch size> --num_images <number generated images> --name <dictionary name>
 ```
